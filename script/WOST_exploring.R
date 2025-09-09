@@ -8,6 +8,8 @@ library('tsibble')
 library("fpp3")
 library('slider')
 library('lubridate')
+library('patchwork')
+
 
 # birds -------------------------------------------------------------------
 
@@ -37,6 +39,7 @@ WOST_data <-
                initiation[str_detect(
                  initiation, "([0-9]+).*$")]) %>% 
       mutate(month = month.abb[month(as.Date(initiation))],
+             year = year(as.Date(initiation)),
              .before = date_score)
   ) %>% 
   mutate(new_inititation = 
@@ -393,10 +396,48 @@ month_water_birds_enp <-autoplot(stl_output_inland %>%
 
 
 # plots -------------------------------------------------------------------
-library(patchwork)
+
 
 month_water_birds_3a+
 month_water_birds_enp+
 week_water_birds_3a+
 week_water_birds_enp
 
+
+
+
+
+
+# gams  -------------------------------------------------------------------
+
+
+depth_inland
+ #this is the initiation months 
+
+depth_inland_wost <- depth_inland %>% 
+  dplyr::mutate(depth_inland, 
+                first_of_month = parse_date_time(
+                  paste(month.abb[month], year), order = "b Y"),
+                month = tsibble::yearmonth(first_of_month)) %>% 
+  left_join(WOST_months , 
+            join_by(month))
+
+
+depth_inland_wost <- depth_inland_wost %>% 
+  mutate(inittiation = replace_na(inittiation, '0'),
+         inittiation = if_else(inittiation == 'yes', '1', inittiation),
+         inittiation = as.numeric(inittiation))
+  
+  
+
+
+
+m1 <- gamm(inittiation ~ s(week, bs = "cc") + 
+             s(year, k= 10) + s(avg_depth, k = 50),
+           data = depth_inland_wost)
+
+
+summary(m1$gam)
+layout(matrix(1:3, ncol = 3))
+plot(m1$gam, scale = 0)
+layout(1)
