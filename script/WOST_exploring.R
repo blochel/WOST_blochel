@@ -8,8 +8,9 @@ library('tsibble')
 library("fpp3")
 library('slider')
 library('lubridate')
+library('mgcv')
 library('patchwork')
-
+library('gratia')
 
 # birds -------------------------------------------------------------------
 
@@ -407,6 +408,37 @@ week_water_birds_enp
 
 
 
+# time decomposition ------------------------------------------------------
+
+depth_inland_td <- tsibble::as_tsibble(depth_inland, index=time)
+
+autoplot(depth_inland_td, avg_depth)
+
+water_df_ts <- depth_inland_td %>% 
+  mutate(ma_5 = slide_dbl(avg_depth, 
+                           mean, 
+                           .before = 5,
+                           .after = 0,
+                           .complete = TRUE), 
+         ma_10 = slide_dbl(avg_depth, 
+                          mean, 
+                          .before = 10,
+                          .after = 0,
+                          .complete = TRUE),
+         msd_5 = slide_dbl(avg_depth, 
+                          sd, 
+                          .before = 5,
+                          .after = 0,
+                          .complete = TRUE), 
+         msd_10 = slide_dbl(avg_depth, 
+                           sd, 
+                           .before = 10,
+                           .after = 0,
+                           .complete = TRUE)) 
+
+
+
+
 
 # gams  -------------------------------------------------------------------
 
@@ -414,10 +446,10 @@ week_water_birds_enp
 depth_inland
  #this is the initiation months 
 
-depth_inland_wost <- depth_inland %>% 
-  dplyr::mutate(depth_inland, 
+depth_inland_wost <- water_df_ts %>% 
+  dplyr::mutate(water_df_ts, 
                 first_of_month = parse_date_time(
-                  paste(month.abb[month], year), order = "b Y"),
+                  paste(month.abb[month(water_df_ts$time)], year), order = "b Y"),
                 month = tsibble::yearmonth(first_of_month)) %>% 
   left_join(WOST_months , 
             join_by(month))
@@ -426,7 +458,8 @@ depth_inland_wost <- depth_inland %>%
 depth_inland_wost <- depth_inland_wost %>% 
   mutate(inittiation = replace_na(inittiation, '0'),
          inittiation = if_else(inittiation == 'yes', '1', inittiation),
-         inittiation = as.numeric(inittiation))
+         inittiation = as.numeric(inittiation), 
+         week = week(time))
   
   
 
@@ -438,6 +471,21 @@ m1 <- gamm(inittiation ~ s(week, bs = "cc") +
 
 
 summary(m1$gam)
-layout(matrix(1:3, ncol = 3))
-plot(m1$gam, scale = 0)
-layout(1)
+#layout(matrix(1:3, ncol = 3))
+#plot(m1$gam, scale = 0)
+#layout(1)
+draw(m1, residuals = TRUE, rug = FALSE)
+
+
+
+m2 <- gam(inittiation ~ s(week, avg_depth, bs = "fs", k = 20) +
+            s(ma_10) + #water draw down 10 days
+            s(ma_5) + #water draw down 5 days
+            #s(msd_10, k = 20)+     
+            s(year, k = 15),
+               data = depth_inland_wost,
+          method = "REML", 
+          family = binomial("logit"))
+draw(m2, residuals = TRUE, rug = FALSE)
+
+
