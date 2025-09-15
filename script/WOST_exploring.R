@@ -197,15 +197,6 @@ autoplot(add_decomp_threeA) +
   ggtitle('STL - 3A')
 
 
-stl_output_threeA <- data_ts_threeA %>% 
-  model(STL(mean_depth ~ trend(window = 104) + 
-              season(window = 15), 
-            robust = TRUE)) %>% 
-  components()
-
-autoplot(stl_output_threeA) +
-  ggtitle('STL - 3A')
-
 
 
 #first monday of the month 
@@ -218,43 +209,6 @@ WOST_weeks <-  dplyr::mutate(WOST_data,
 
 
 
-
-# 3a water + birds ----------------------------------------------------------------------
-
-
-week_water_birds_3a <- autoplot(stl_output_threeA %>% 
-           left_join(WOST_weeks,
-                     by = join_by(week)) %>% 
-           mutate(week = as.numeric(week))) +
-  ggtitle('STL - 3A Scale = Week [trend(104), season(15)]')+
-  geom_vline(xintercept = stl_output_threeA %>% 
-               left_join(WOST_weeks,
-                         by = join_by(week)) %>% 
-               filter(inittiation == 'yes') %>% 
-               pull(week) %>% as.numeric() ,
-             linewidth = 3, color = 'red',
-             alpha =0.4)
-
-
-# enp water + birds---------------------------------------------------------------------
-
-
-week_water_birds_enp <- autoplot(stl_output_inland %>% 
-           left_join(WOST_weeks,
-                     by = join_by(week)) %>% 
-           mutate(week = as.numeric(week))) +
-  ggtitle('STL - ENP Scale = Week [trend(104), season(15)]')+
-  geom_vline(xintercept = stl_output_inland %>% 
-               left_join(WOST_weeks,
-                         by = join_by(week)) %>% 
-               filter(inittiation == 'yes') %>% 
-               pull(week) %>% as.numeric() ,
-             linewidth = 3, color = 'red',
-             alpha =0.4)
-
-inland_ts <- as_tsibble(data2  %>% 
-                          filter(area == 'inland'), 
-                        index = week)
 
 
 
@@ -395,6 +349,43 @@ month_water_birds_enp <-autoplot(stl_output_inland %>%
              alpha =0.4)
 
 
+# 3a water + birds ----------------------------------------------------------------------
+
+
+week_water_birds_3a <- autoplot(stl_output_threeA %>% 
+                                  left_join(WOST_weeks,
+                                            by = join_by(week)) %>% 
+                                  mutate(week = as.numeric(week))) +
+  ggtitle('STL - 3A Scale = Week [trend(104), season(15)]')+
+  geom_vline(xintercept = stl_output_threeA %>% 
+               left_join(WOST_weeks,
+                         by = join_by(week)) %>% 
+               filter(inittiation == 'yes') %>% 
+               pull(week) %>% as.numeric() ,
+             linewidth = 3, color = 'red',
+             alpha =0.4)
+
+
+# enp water + birds---------------------------------------------------------------------
+
+
+week_water_birds_enp <- autoplot(stl_output_inland %>% 
+                                   left_join(WOST_weeks,
+                                             by = join_by(week)) %>% 
+                                   mutate(week = as.numeric(week))) +
+  ggtitle('STL - ENP Scale = Week [trend(104), season(15)]')+
+  geom_vline(xintercept = stl_output_inland %>% 
+               left_join(WOST_weeks,
+                         by = join_by(week)) %>% 
+               filter(inittiation == 'yes') %>% 
+               pull(week) %>% as.numeric() ,
+             linewidth = 3, color = 'red',
+             alpha =0.4)
+
+inland_ts <- as_tsibble(data2  %>% 
+                          filter(area == 'inland'), 
+                        index = week)
+
 
 # plots -------------------------------------------------------------------
 
@@ -415,7 +406,12 @@ depth_inland_td <- tsibble::as_tsibble(depth_inland, index=time)
 autoplot(depth_inland_td, avg_depth)
 
 water_df_ts <- depth_inland_td %>% 
-  mutate(ma_5 = slide_dbl(avg_depth, 
+  mutate(ma_1 = slide_dbl(avg_depth, 
+                          mean, 
+                          .before = 1,
+                          .after = 0,
+                          .complete = TRUE), 
+         ma_5 = slide_dbl(avg_depth, 
                            mean, 
                            .before = 5,
                            .after = 0,
@@ -425,16 +421,9 @@ water_df_ts <- depth_inland_td %>%
                           .before = 10,
                           .after = 0,
                           .complete = TRUE),
-         msd_5 = slide_dbl(avg_depth, 
-                          sd, 
-                          .before = 5,
-                          .after = 0,
-                          .complete = TRUE), 
-         msd_10 = slide_dbl(avg_depth, 
-                           sd, 
-                           .before = 10,
-                           .after = 0,
-                           .complete = TRUE)) 
+         mdd_1 = (avg_depth - ma_1),
+         mdd_5 = (avg_depth - ma_5), 
+         mdd_10 = (avg_depth - ma_10)) 
 
 
 
@@ -452,7 +441,8 @@ depth_inland_wost <- water_df_ts %>%
                   paste(month.abb[month(water_df_ts$time)], year), order = "b Y"),
                 month = tsibble::yearmonth(first_of_month)) %>% 
   left_join(WOST_months , 
-            join_by(month))
+            join_by(month)) %>% 
+  mutate(months = month(time))
 
 
 depth_inland_wost <- depth_inland_wost %>% 
@@ -481,11 +471,30 @@ draw(m1, residuals = TRUE, rug = FALSE)
 m2 <- gam(inittiation ~ s(week, avg_depth, bs = "fs", k = 20) +
             s(ma_10) + #water draw down 10 days
             s(ma_5) + #water draw down 5 days
-            #s(msd_10, k = 20)+     
             s(year, k = 15),
                data = depth_inland_wost,
           method = "REML", 
           family = binomial("logit"))
+summary(m2)
 draw(m2, residuals = TRUE, rug = FALSE)
+
+m3 <- gam(inittiation ~ s(week, avg_depth, bs = "fs", k = 20) + #RE THINK THESE!!!!
+            s(ma_10) + #water draw down 10 days
+            s(ma_5) + #water draw down 5 days
+            s(year, k = 15)+
+            te(months, mdd_1, bs = c("cc",'fs'), k = 12),
+          data = depth_inland_wost,       #good keep 
+          method = "REML",               #good keep 
+          family = binomial("logit"))   #good keep 
+summary(m3)
+draw(m3, residuals = TRUE, rug = FALSE)
+
+
+#green up
+#green off
+#fruiting
+
+# create drawdown variables 
+# have it in daily (weekly?)
 
 
