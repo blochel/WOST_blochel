@@ -1,5 +1,4 @@
 library("gratia")
-library("ggplot2")
 library("mgcv")
 library('tidyverse')
 
@@ -249,7 +248,7 @@ draw(m_cat_data2, residuals = TRUE, rug = FALSE)
 
 # data slice over months/weeks(!) holding other covariates at median values
 ds2 <- data_slice(m_cat_data2, months = evenly(months, n = 100),
-                  drawd_1 = evenly(drawd_1, n = 100))
+                  drawd_14 = evenly(drawd_14, n = 100))
 fv2 <- fitted_values(m_cat_data2, data = ds2)
 
 fv2 %>% 
@@ -264,8 +263,8 @@ fv2 %>%
 # testing binomial data ---------------------------------------------------
 
 
-m_bi_data <- bam(bi_initiation ~  s(months) + s(drawd) + 
-            te(months, drawd, bs = c("cc",'re')), #what is this cc and fs?
+m_bi_data <- bam(bi_initiation ~  s(weeks) + s(drawd_7) + 
+            te(weeks, drawd_7, bs = c("cc",'re')), #what is this cc and fs?
           data = wost_inland,       
           method = "REML",               
           family = binomial("logit"))   
@@ -274,13 +273,36 @@ draw(m_bi_data, residuals = TRUE, rug = FALSE)
 
 
 
-ds3 <- data_slice(m_bi_data, months = evenly(months, n = 100),
-                  drawd = evenly(drawd, n = 100))
+ds3 <- data_slice(m_bi_data, weeks = evenly(weeks, n = 100),
+                  drawd_7 = evenly(drawd_7, n = 100))
 fv3 <- fitted_values(m_bi_data, data = ds3)
 
+
 fv3 %>% 
-  ggplot(aes(x = months, y = .fitted)) +
+  group_by(weeks) %>% 
+  summarise(weeks = weeks,
+            .fitted = .fitted,
+            .lower_ci = .lower_ci,
+            .upper_ci = .upper_ci) %>% 
+  ggplot(aes(x = weeks, y = .fitted)) +
+  geom_ribbon(aes(ymin = .lower_ci, ymax = .upper_ci),
+              alpha = 0.2) 
+
+
+fv3 %>% 
+  group_by(weeks) %>% 
+  summarise(weeks = mean(weeks),
+            .fitted = mean(.fitted),
+            .lower_ci = mean(.lower_ci),
+            .upper_ci = mean(.upper_ci)) %>% 
+  ggplot(aes(x = weeks, y = .fitted)) +
   geom_ribbon(aes(ymin = .lower_ci, ymax = .upper_ci),
               alpha = 0.2) +
-  geom_line()
+  geom_line(color = 'blue', linewidth = 2)
+
+
+
+
+#structure test data around the nesting Nov - April. 
+#
 
