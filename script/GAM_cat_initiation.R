@@ -306,3 +306,31 @@ fv3 %>%
 #structure test data around the nesting Nov - April. 
 #
 
+
+
+
+
+
+test_data <- wost_inland %>% 
+  filter( year(time) <= 2023)
+
+# Predictions with standard errors
+pred <- predict(m_bi_data, newdata = test_data, type = "response", se.fit = TRUE)
+fit_vals <- pred$fit
+se_vals  <- pred$se.fit
+lower <- fit_vals - 1.96 * se_vals
+upper <- fit_vals + 1.96 * se_vals
+
+
+
+
+
+# Quick plot
+plot(test_data$time, test_data$bi_initiation, pch = 16, col = "blue",
+     xlim = c(min(test_data$time), max(test_data$time)), ylim = range(test_data$bi_initiation))
+lines(test_data$time, fit_vals, col = "red", lwd = 2)
+lines(test_data$time, lower, col = "grey", lty = 2)
+lines(test_data$time, upper, col = "grey", lty = 2)
+
+
+
