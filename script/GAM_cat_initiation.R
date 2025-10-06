@@ -41,8 +41,7 @@ WOST_data <-
                                    'Jan',
                                    'Feb',
                                    'Mar',
-                                   'Apr')))
-
+                                   'Apr'))) 
 
 WOST_data %>% 
   ggplot(aes(month))+
@@ -127,8 +126,8 @@ wost_inland <- depth_inland_wost %>%
          doy = as.numeric(strftime(time, format = "%j")),
          f.year = as.factor(year(time)),
          bi_initiation = if_else(i.initiation == 1, 0, 1)) %>% 
-  group_by(month) %>% 
-  mutate(max_m_depth = mean(avg_depth, na.omit = TRUE)) %>% 
+  group_by(week) %>% 
+  mutate(max_week_depth = mean(avg_depth, na.omit = TRUE)) %>% 
   ungroup() %>% 
   group_by(bi_initiation) %>% 
   mutate( drawd_1 = lag(avg_depth, 1) - avg_depth,
@@ -137,10 +136,11 @@ wost_inland <- depth_inland_wost %>%
           drawd_4 = lag(avg_depth, 4) - avg_depth,
           drawd_7 = lag(avg_depth, 7) - avg_depth,
           drawd_14 = lag(avg_depth, 14) - avg_depth) %>% 
+  mutate(year_depth_lag = lag(max_week_depth, 183)-max_week_depth) %>% 
   ungroup() 
 
 
-
+plot(wost_inland$time, wost_inland$year_depth_lag)
 
 
 # The reproductive period takes 120 to 130 days (approximately four months). 
@@ -260,11 +260,19 @@ fv2 %>%
 
 
 
-# testing binomial data ---------------------------------------------------
+# testing binomial yes/no logit data ---------------------------------------------------
+
+#remove "bad" data 
+
+wost_inland <- wost_inland 
 
 
-m_bi_data <- bam(bi_initiation ~  s(weeks) + s(drawd_7) + 
-            te(weeks, drawd_7, bs = c("cc",'re')), #what is this cc and fs?
+m_bi_data <- bam(bi_initiation ~  
+                   s(weeks) +
+                   s(drawd_7) + 
+                   s(year_depth_lag) +
+                   te(year_depth_lag, drawd_7, bs = c("re",'re'))+
+            te(weeks, drawd_7, bs = c("cc",'re')), 
           data = wost_inland,       
           method = "REML",               
           family = binomial("logit"))   
@@ -273,20 +281,12 @@ draw(m_bi_data, residuals = TRUE, rug = FALSE)
 
 
 
-ds3 <- data_slice(m_bi_data, weeks = evenly(weeks, n = 100),
-                  drawd_7 = evenly(drawd_7, n = 100))
+ds3 <- data_slice(m_bi_data, weeks = evenly(weeks, n = 1000),
+                  drawd_7 = evenly(drawd_7, n = 1000))
 fv3 <- fitted_values(m_bi_data, data = ds3)
 
 
-fv3 %>% 
-  group_by(weeks) %>% 
-  summarise(weeks = weeks,
-            .fitted = .fitted,
-            .lower_ci = .lower_ci,
-            .upper_ci = .upper_ci) %>% 
-  ggplot(aes(x = weeks, y = .fitted)) +
-  geom_ribbon(aes(ymin = .lower_ci, ymax = .upper_ci),
-              alpha = 0.2) 
+
 
 
 fv3 %>% 
@@ -303,8 +303,7 @@ fv3 %>%
 
 
 
-#structure test data around the nesting Nov - April. 
-#
+
 
 
 
@@ -316,21 +315,96 @@ test_data <- wost_inland %>%
 
 # Predictions with standard errors
 pred <- predict(m_bi_data, newdata = test_data, type = "response", se.fit = TRUE)
-fit_vals <- pred$fit
-se_vals  <- pred$se.fit
-lower <- fit_vals - 1.96 * se_vals
-upper <- fit_vals + 1.96 * se_vals
 
+test_data$fit_vals <- fit_vals <- pred$fit
+test_data$se_vals <- se_vals  <- pred$se.fit
+test_data$lower <- lower <- fit_vals - 1.96 * se_vals
+test_data$upper <- upper <- fit_vals + 1.96 * se_vals
 
 
 
 
 # Quick plot
 plot(test_data$time, test_data$bi_initiation, pch = 16, col = "blue",
-     xlim = c(min(test_data$time), max(test_data$time)), ylim = range(test_data$bi_initiation))
+     xlim = c(min(test_data$time), max(test_data$time + 365)), ylim = range(test_data$bi_initiation))
 lines(test_data$time, fit_vals, col = "red", lwd = 2)
 lines(test_data$time, lower, col = "grey", lty = 2)
 lines(test_data$time, upper, col = "grey", lty = 2)
 
+data.frame(
+predicted = test_data %>% 
+  drop_na(fit_vals) %>% 
+  group_by(year(time)) %>% 
+  filter(fit_vals == max(fit_vals, na.rm = TRUE )) %>% 
+  mutate(date = filter(time != as.Date("1995-12-17") & 
+                         time != as.Date("2003-01-22") &
+                         time != as.Date("2004-02-02")   )) %>% 
+  pull(time)
+  ,
+obseverd =  wost_initiate_df %>% 
+    filter(year >= 1995) %>% pull(initiation)
+)
 
+  
+  test_data %>% 
+  ggplot(aes( time, drawd_7)) +
+  geom_line()
+
+
+# fine tuning to weeks ----------------------------------------------------
+
+#structure test data around the nesting Nov - April. 
+#
+
+WOST_data <- 
+  rbind(
+    wost_initiate_df %>% 
+      filter(initiation %in%
+               initiation[str_detect(
+                 initiation, "([A-Z]+).*$")]) %>% 
+      mutate(month = substr(initiation, 0, 3),
+             i.initiation = 2,
+             .before = date_score) ,
+    wost_initiate_df %>% 
+      filter(initiation %in%
+               initiation[str_detect(
+                 initiation, "([0-9]+).*$")]) %>% 
+      mutate(month = month.abb[month(as.Date(initiation))],
+             year = year(as.Date(initiation)),
+             i.initiation = 2, 
+             .before = date_score)
+  ) %>% 
+  mutate(new_inititation = 
+           match(month, month.abb),
+         new_inititation = zoo::as.yearmon(
+           paste(year, new_inititation), "%Y %m"),
+         .before = month,
+         month = factor(month,
+                        levels = c('Nov',
+                                   'Dec',
+                                   'Jan',
+                                   'Feb',
+                                   'Mar',
+                                   'Apr')))
+
+
+
+
+
+early_BAD_dates <- wost_initiate_df %>% 
+  filter(str_detect(initiation, "([A-Z]+).*$", negate = FALSE) ) %>% 
+  mutate(month = as.Date(initiation))
+
+early_BAD_dates %>% 
+  ggplot(aes(week))+
+  geom_histogram(stat="count")
+
+wost_daY_dates <- wost_initiate_df %>% 
+  filter(str_detect(initiation, "([0-9]+).*$", negate = FALSE) ) %>% 
+  mutate(week = week(initiation))
+
+
+wost_daY_dates %>% 
+  ggplot(aes(week))+
+  geom_histogram(stat="count")
 
