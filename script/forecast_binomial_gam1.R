@@ -47,7 +47,7 @@ WOST_data <-
       filter(initiation %in%
                initiation[str_detect(
                  initiation, "([0-9]+).*$")]) %>% 
-      mutate(month = month.abb[month(as.Date(initiation))],
+      mutate(month = month.abb[month(as.Date(initiation))],                    #make this week!
              year = year(as.Date(initiation)),
              i.initiation = 2, 
              .before = date_score)
@@ -226,7 +226,7 @@ lines(wost_test$time, test_predictions$fit, col = "red")
 
 data.frame(date = wost_test$time, 
            model_prediction = test_predictions$fit) %>% 
-  filter(model_prediction > 0.5)
+  filter(model_prediction >= 0.5) 
 
 
 WOST_data %>% filter(year >= 2023)

@@ -331,27 +331,24 @@ lines(test_data$time, fit_vals, col = "red", lwd = 2)
 lines(test_data$time, lower, col = "grey", lty = 2)
 lines(test_data$time, upper, col = "grey", lty = 2)
 
-data.frame(
-predicted = test_data %>% 
-  drop_na(fit_vals) %>% 
-  group_by(year(time)) %>% 
-  filter(fit_vals == max(fit_vals, na.rm = TRUE )) %>% 
-  mutate(date = filter(time != as.Date("1995-12-17") & 
-                         time != as.Date("2003-01-22") &
-                         time != as.Date("2004-02-02")   )) %>% 
-  pull(time)
-  ,
-obseverd =  wost_initiate_df %>% 
-    filter(year >= 1995) %>% pull(initiation)
-)
+
 
   
-  test_data %>% 
-  ggplot(aes( time, drawd_7)) +
-  geom_line()
-
-
-# fine tuning to weeks ----------------------------------------------------
+ p = test_data %>% 
+  ggplot() +
+    geom_point(aes(time,fit_vals, color=as.factor(year(time))),
+                 data = test_data %>% 
+                   group_by(year(time)) %>% 
+                   filter(fit_vals > 0.7))
+      
+ggExtra::ggMarginal(p, type="histogram", margins = "x") 
+  
+ggplot()+
+  geom_point(aes(time, 
+                bi_initiation, color = as.factor(bi_initiation)),
+             data = test_data)
+      
+# # # fine tuning to weeks ----------------------------------------------------
 
 #structure test data around the nesting Nov - April. 
 #
